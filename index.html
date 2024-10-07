@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>BLE Door Opener</title>
+    <!-- Responsive Meta Tag -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        /* Reset and Box Sizing */
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+        }
+
+        /* Body Styling */
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
+            padding: 0;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        /* Container Styling */
+        #container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        /* Card Styling */
+        .card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 30px;
+            max-width: 400px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        /* Heading Styling */
+        h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        /* Paragraph Styling */
+        p {
+            font-size: 1em;
+            margin-bottom: 20px;
+        }
+
+        /* Input Styling */
+        input {
+            width: 100%;
+            padding: 15px;
+            margin-bottom: 15px;
+            border: none;
+            border-radius: 30px;
+            font-size: 1em;
+            color: #333;
+        }
+
+        input::placeholder {
+            color: #aaa;
+        }
+
+        /* Button Styling */
+        button {
+            width: 100%;
+            padding: 15px;
+            margin-bottom: 15px;
+            border: none;
+            border-radius: 30px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        #openButton {
+            background: #ff6b6b;
+            color: #fff;
+        }
+
+        #openButton:hover {
+            background: #ee5253;
+        }
+
+        #scanButton {
+            background: #48dbfb;
+            color: #fff;
+        }
+
+        #scanButton:hover {
+            background: #0abde3;
+        }
+
+        /* Status and Log Styling */
+        #status {
+            font-size: 1em;
+            margin-top: 10px;
+        }
+
+        #log {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 15px;
+            border-radius: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            color: #fff;
+        }
+
+        /* Footer Styling */
+        footer {
+            text-align: center;
+            padding: 10px;
+            font-size: 0.9em;
+            color: #fff;
+        }
+
+        footer a {
+            color: #ff9ff3;
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+
+        /* Responsive Styling */
+        @media (max-width: 600px) {
+            h1 {
+                font-size: 1.5em;
+            }
+
+            input,
+            button {
+                padding: 12px;
+                font-size: 0.9em;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="container">
+        <div class="card">
+            <h1>🔒 BLE Door Opener</h1>
+            <p>Enter your username and password to open the door
+                <br> The Passkey is 123456 :
+            </p>
+            <input type="text" id="username" placeholder="Enter your username" value="218204764A">
+            <input type="password" id="password" placeholder="Enter your password" value="42xm4Av0aMlq">
+            <button id="openButton">Open Door</button>
+            <button id="scanButton">Scan Characteristics</button>
+            <div id="status"></div>
+            <pre id="log"></pre>
+        </div>
+    </div>
+    <footer>
+        Made with ❤️ by <a href="https://github.com/ihebmrabet0" target="_blank">Iheb Mrabet</a>
+    </footer>
+
+    <!-- JavaScript Code -->
+    <script>
+        // Hardcoded service UUID and device name
+        const lockId = '2ff7c135-5010-497b-a054-cea3984c7cc9'; // Ensure it's lowercase
+        const lockName = 'NimBLE Servo Lock 3';
+
+        document.getElementById('openButton').addEventListener('click', async () => {
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value.trim();
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = '';
+            statusDiv.style.color = 'green';
+
+            if (!username || !password) {
+                alert('Please enter both username and password.');
+                return;
+            }
+
+            if (!navigator.bluetooth) {
+                statusDiv.style.color = 'red';
+                statusDiv.textContent = 'Web Bluetooth API is not available in this browser.';
+                return;
+            }
+
+            try {
+                statusDiv.textContent = 'Requesting Bluetooth Device...';
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [{ name: lockName }],
+                    optionalServices: [lockId]
+                });
+
+                statusDiv.textContent = 'Connecting to GATT Server...';
+                const server = await device.gatt.connect();
+
+                statusDiv.textContent = 'Getting Service...';
+                const service = await server.getPrimaryService(lockId);
+
+                // Characteristic UUIDs
+                const userCharacteristicUUID = '5d3932fa-2901-4b6b-9f41-7720976a85d4';
+                const passCharacteristicUUID = 'dd16cad0-a66a-402f-9183-201c20753647';
+                const lockStateCharacteristicUUID = '05c5653a-7279-406c-9f9e-df72aa99ca2d';
+
+                statusDiv.textContent = 'Getting Characteristics...';
+                const userCharacteristic = await service.getCharacteristic(userCharacteristicUUID);
+                const passCharacteristic = await service.getCharacteristic(passCharacteristicUUID);
+                const lockStateCharacteristic = await service.getCharacteristic(lockStateCharacteristicUUID);
+
+                // Write to the characteristics
+                const encoder = new TextEncoder();
+
+                statusDiv.textContent = 'Writing Username...';
+                await userCharacteristic.writeValue(encoder.encode(username));
+
+                statusDiv.textContent = 'Writing Password...';
+                await passCharacteristic.writeValue(encoder.encode(password));
+
+                statusDiv.textContent = 'Writing Lock State...';
+                await lockStateCharacteristic.writeValue(encoder.encode('2'));
+
+                statusDiv.textContent = 'Door opened successfully!';
+            } catch (error) {
+                console.error(error);
+                statusDiv.style.color = 'red';
+                statusDiv.textContent = 'Error: ' + error.message;
+            }
+        });
+
+        // Function to scan and display characteristics
+        document.getElementById('scanButton').addEventListener('click', async () => {
+            const statusDiv = document.getElementById('status');
+            const logDiv = document.getElementById('log');
+            statusDiv.textContent = '';
+            logDiv.textContent = '';
+
+            if (!navigator.bluetooth) {
+                statusDiv.style.color = 'red';
+                statusDiv.textContent = 'Web Bluetooth API is not available in this browser.';
+                return;
+            }
+
+            try {
+                statusDiv.textContent = 'Requesting Bluetooth Device...';
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [{ name: lockName }],
+                    optionalServices: [lockId]
+                });
+
+                statusDiv.textContent = 'Connecting to GATT Server...';
+                const server = await device.gatt.connect();
+
+                statusDiv.textContent = 'Getting Service...';
+                const service = await server.getPrimaryService(lockId);
+
+                statusDiv.textContent = 'Discovering Characteristics...';
+                const characteristics = await service.getCharacteristics();
+
+                if (characteristics.length === 0) {
+                    statusDiv.style.color = 'red';
+                    statusDiv.textContent = 'No characteristics found on service.';
+                    return;
+                }
+
+                logDiv.textContent += 'Characteristics found:\n';
+                for (const characteristic of characteristics) {
+                    logDiv.textContent += `Characteristic UUID: ${characteristic.uuid}\n`;
+                    logDiv.textContent += `  Properties: ${JSON.stringify(characteristic.properties)}\n\n`;
+                }
+
+                statusDiv.textContent = 'Scan complete. See log below.';
+            } catch (error) {
+                console.error(error);
+                statusDiv.style.color = 'red';
+                statusDiv.textContent = 'Error: ' + error.message;
+            }
+        });
+    </script>
+</body>
+
+</html>
